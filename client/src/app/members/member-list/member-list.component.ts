@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { Observable } from 'ngx-bootstrap/node_modules/rxjs/dist/types';
+import { Observable } from 'rxjs';
 import { Member } from 'src/app/_model/member';
 import { MembersService } from 'src/app/_services/members.service';
 
