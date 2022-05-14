@@ -3,8 +3,11 @@ import { Injectable } from '@angular/core';
 import { map } from 'rxjs/operators';
 import { environment } from 'src/environments/environment';
 import { Member } from '../_model/member';
-import { of } from 'rxjs'
+import { of, take } from 'rxjs'
 import { PaginatedResult } from '../_model/pagination';
+import { AccountService } from './account.service';
+import { UserParams } from '../_model/userParams';
+import { User } from '../_model/user';
 
 @Injectable({
   providedIn: 'root'
@@ -12,33 +15,56 @@ import { PaginatedResult } from '../_model/pagination';
 export class MembersService {
   baseUrl = environment.apiUrl;
   members: Member[] = [];
-  paginatedResult: PaginatedResult<Member[]> = new PaginatedResult<Member[]>();
+  memberCache = new Map();
+  userParams: UserParams;
+  user: User;
 
-  constructor(private http: HttpClient) { }
-
-  getMembers(page?: number, itemsPerPage?: number)  {
-    // if(this.members.length > 0) return of(this.members); //Caching
-    let params = new HttpParams();
-
-    if(page !== null && itemsPerPage !== null) {
-      params = params.append('pageNumber', page.toString());
-      params = params.append('pageSize', itemsPerPage.toString());
-    }
-    return this.http.get<Member[]>(this.baseUrl + 'users', {observe: 'response', params}).pipe(
-      map(response => {
-        this.paginatedResult.result = response.body;
-        if(response.headers.get('pagination') !== null) {
-          this.paginatedResult.pagination = JSON.parse(response.headers.get('pagination'));
-        }
-        //console.log(this.paginatedResult);
-        return this.paginatedResult;
-      })
-    )
+  constructor(private http: HttpClient, private accountService: AccountService) { 
+    accountService.currentUser$.pipe(take(1)).subscribe(user => {
+      this.user = user;
+      this.userParams = new UserParams(user);
+    })
   }
 
+  getUserParams() {
+    return this.userParams;
+  }
+
+  setUserParams(params: UserParams) {
+    this.userParams = params;
+  }
+  resetUserParams() {
+    this.userParams = new UserParams(this.user);
+    return this.userParams;
+  }
+  getMembers(userParams: UserParams)  {
+
+    var response = this.memberCache.get(Object.values(userParams).join('-'));
+    if(response) {
+      return of(response);
+    }
+    let params = this.getPaginationHeaders(userParams.pageNumber, userParams.pageSize);
+
+    params = params.append('minAge', userParams.minAge.toString());
+    params = params.append('maxAge', userParams.maxAge.toString());
+    params = params.append('gender', userParams.gender);
+    params = params.append('orderBy', userParams.orderBy);
+    
+    return this.getPaginatedResult<Member[]>(this.baseUrl + 'users', params)
+      .pipe(map(response => {
+        this.memberCache.set(Object.values(userParams).join('-'), response);
+        return response;
+    }) );
+  }
+  
   getMember(username: string) {
-    const member = this.members.find(x => x.username === username);
-    if(member !== undefined) {
+
+    //console.log(this.memberCache);
+    const member = [...this.memberCache.values()]
+      .reduce((arr, elem) => arr.concat(elem.result), [])
+      .find((member: Member) => member.username === username);
+
+    if(member) {
       return of(member);
     }
     return this.http.get<Member>(this.baseUrl + 'users/' + username);
@@ -59,5 +85,29 @@ export class MembersService {
 
   deletePhoto(photoId: number) {
     return this.http.delete(this.baseUrl + 'users/delete-photo/' + photoId, {});
+  }
+
+  private getPaginatedResult<T>(url: string, params: HttpParams) {
+
+    const paginatedResult : PaginatedResult<T> = new PaginatedResult<T>();
+
+    return this.http.get<T>(url, { observe: 'response', params }).pipe(
+      map(response => {
+        paginatedResult.result = response.body;
+        if (response.headers.get('pagination') !== null) {
+          paginatedResult.pagination = JSON.parse(response.headers.get('pagination'));
+        }
+        return paginatedResult;
+      })
+    );
+  }
+
+  private getPaginationHeaders(pageNumber: number, pageSize: number) {
+    let params = new HttpParams();
+
+    params = params.append('pageNumber', pageNumber.toString());
+    params = params.append('pageSize', pageSize.toString());
+
+      return params;
   }
 }

@@ -1,9 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { Observable } from 'ngx-bootstrap/node_modules/rxjs/dist/types';
 import { ToastrService } from 'ngx-toastr';
 import { User } from '../_model/user';
 import { AccountService } from '../_services/account.service';
+import { Observable } from 'rxjs';
 
 @Component({
   selector: 'app-nav',
